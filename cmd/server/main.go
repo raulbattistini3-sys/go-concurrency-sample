@@ -2,39 +2,53 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log"
+	"net/http"
 
+	"go-concurrency-sample/internal/api"
 	"go-concurrency-sample/internal/config"
 	"go-concurrency-sample/internal/database"
 	"go-concurrency-sample/internal/workers"
 )
 
 func main() {
+	if err := config.Load(); err != nil {
+		log.Fatal(err)
+	}
 
-  if err := config.Load(); err != nil { 
-    log.Fatal(err) 
-  } 
-  cfg := config.Get() 
-  
-  log.Printf( "starting server with %d workers", cfg.Workers.Count, ) 
-  log.Printf( "database: %s:%s/%s", cfg.Database.Host, cfg.Database.Port, cfg.Database.Name, )
-  userRepo := database.NewUserRepository(config.GetDatabase())
-    
-  if userRepo == nil {
-      err := errors.New("error user repo nil")
-      log.Fatal(fmt.Sprintf("error user repo nil %w", err))
-  }
+	cfg := config.Get()
 
-    ctx := context.Background()
+	db, err := database.NewMySQL(cfg.Database)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
-    pool := workers.NewPool(
-        userRepo,
-        cfg.Workers,
-    )
+	userRepo := database.NewUserRepository(db)
 
-    if err := pool.Run(ctx); err != nil {
-        log.Fatal(err)
-    }
+	pool := workers.NewPool(
+		userRepo,
+		cfg.Workers.Count,
+		cfg.Workers.Queue,
+	)
+
+	ctx := context.Background()
+
+	// Start workers.
+	go pool.Run(ctx)
+
+	handler := api.NewHandler(pool)
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(
+		"POST /users/generate",
+		handler.GenerateUsers,
+	)
+
+	log.Printf("HTTP server listening on :5555")
+
+	if err := http.ListenAndServe(":5555", mux); err != nil {
+		log.Fatal(err)
+	}
 }
