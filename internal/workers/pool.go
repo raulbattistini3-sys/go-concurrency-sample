@@ -1,56 +1,80 @@
 package workers
 
 import (
-      "context"
-    "sync"
+	"context"
+	"sync"
+	"sync/atomic"
 
-    "go-concurrency-sample/internal/database"
-    "go-concurrency-sample/internal/types"
+	"go-concurrency-sample/internal/database"
+	"go-concurrency-sample/internal/types"
+	"go-concurrency-sample/internal/users"
 )
 
 type Pool struct {
-    repo        *database.UserRepository
-    workerCount int
+	repo        *database.UserRepository
+	workerCount int
+
+	Jobs    chan types.Job
+	Results chan types.Result
+
+	jobID atomic.Uint64
 }
 
 func NewPool(
-    repo *database.UserRepository,
-    workerCount int,
+	repo *database.UserRepository,
+	workerCount int,
+	queueSize int,
 ) *Pool {
-    return &Pool{
-        repo:        repo,
-        workerCount: workerCount,
-    }
+	return &Pool{
+		repo:        repo,
+		workerCount: workerCount,
+		Jobs:         make(chan types.Job, queueSize),
+		Results:      make(chan types.Result, queueSize),
+	}
 }
 
-func (p *Pool) Run(ctx context.Context) error {
-    jobs := make(chan types.Job, 1000)
-    results := make(chan types.Result, 1000)
+func (p *Pool) Submit(
+	ctx context.Context,
+	count int,
+) (uint64, error) {
+	workloadID := p.jobID.Add(1)
 
-    var wg sync.WaitGroup
+	for i := 0; i < count; i++ {
+		job := types.Job{
+			ID:   p.jobID.Add(1),
+			Type: types.JobInsertUser,
+			User: users.Generate(i),
+		}
 
-    for i := 0; i < p.workerCount; i++ {
-        worker := NewWorker(i, p.repo)
+		select {
+		case <-ctx.Done():
+			return workloadID, ctx.Err()
 
-        wg.Add(1)
+		case p.Jobs <- job:
+		}
+	}
 
-        go func() {
-            defer wg.Done()
+	return workloadID, nil
+}
 
-            worker.Run(ctx, jobs, results)
-        }()
-    }
+func (p *Pool) Run(ctx context.Context) {
+	var wg sync.WaitGroup
 
-    // coordinator
-    coordinator := NewCoordinator(jobs, results)
+	for i := 0; i < p.workerCount; i++ {
+		worker := NewWorker(i, p.repo)
 
-    if err := coordinator.Dispatch(ctx); err != nil {
-        return err
-    }
+		wg.Add(1)
 
-    close(jobs)
+		go func() {
+			defer wg.Done()
 
-    wg.Wait()
+			worker.Run(
+				ctx,
+				p.Jobs,
+				p.Results,
+			)
+		}()
+	}
 
-    return nil
+	wg.Wait()
 }

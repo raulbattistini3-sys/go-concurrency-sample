@@ -1,66 +1,67 @@
 package workers
 
 import (
-    "context"
-    "log"
+	"context"
+	"log"
 
-    "go-concurrency-sample/internal/database"
-    "go-concurrency-sample/internal/types"
+	"go-concurrency-sample/internal/types"
 )
 
 type Worker struct {
-    id   int
-    repo *database.UserRepository
+	id   int
+	repo UserRepository
 }
 
 func NewWorker(
-    id int,
-    repo *database.UserRepository,
+	id int,
+	repo UserRepository,
 ) *Worker {
-    return &Worker{
-        id:   id,
-        repo: repo,
-    }
+	return &Worker{
+		id:   id,
+		repo: repo,
+	}
 }
 
 func (w *Worker) Run(
-    ctx context.Context,
-    jobs <-chan types.Job,
-    results chan<- types.Result,
+	ctx context.Context,
+	jobs <-chan types.Job,
+	results chan<- types.Result,
 ) {
-    for {
-        select {
-        case <-ctx.Done():
-            return
+	for {
+		select {
+		case <-ctx.Done():
+			return
 
-        case job, ok := <-jobs:
-            if !ok {
-                return
-            }
+		case job, ok := <-jobs:
+			if !ok {
+				return
+			}
 
-            err := w.process(job)
+			err := w.process(job)
+      if err != nil {
+        log.Printf("error when running worker: %v", err)
+      }
 
-            results <- types.Result{
-                JobID: job.ID,
-                Err:   err,
-            }
-        }
-    }
+			results <- types.Result{
+				JobID: job.ID,
+			}
+		}
+	}
 }
 
 func (w *Worker) process(job types.Job) error {
-    log.Printf(
-        "[worker:%d] job=%d type=%d",
-        w.id,
-        job.ID,
-        job.Type,
-    )
+	switch job.Type {
+	case types.JobInsertUser:
+		return w.repo.Insert(&job.User)
 
-    switch job.Type {
-    case types.JobInsertUser:
-        return w.repo.Insert(job.User)
+	default:
+		log.Printf(
+			"[worker:%d] unknown job type=%d",
+			w.id,
+			job.Type,
+		)
 
-    default:
-        return nil
-    }
+		return nil
+	}
 }
+
