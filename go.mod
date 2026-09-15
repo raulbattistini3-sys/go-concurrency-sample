@@ -1,4 +1,4 @@
-module go-new
+module go-concurrency-sample
 
 go 1.26.6
 
