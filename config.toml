@@ -1,0 +1,13 @@
+[workers]
+count = 4
+queue = 1000
+
+[database]
+host = "127.0.0.1"
+port = "3306"
+user = "root"
+password = ""
+name = "test"
+
+max_open_conns = 10
+max_idle_conns = 10

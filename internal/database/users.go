@@ -1,13 +1,14 @@
 package database
 
 import (
-    "database/sql"
+	"database/sql"
 
-    "github.com/raulbattistini/parallel-go/internal/types"
+	"go-concurrency-sample/internal/database"
+	"go-concurrency-sample/internal/types"
 )
 
 type UserRepository struct {
-    db *sql.DB
+    db *database.Config 
 }
 
 func NewUserRepository(db *sql.DB) *UserRepository {

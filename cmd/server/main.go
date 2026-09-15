@@ -1,27 +1,36 @@
 package main
 
 import (
-    "context"
-    "log"
+	"context"
+	"errors"
+	"fmt"
+	"log"
 
-    "internal/config"
-    "internal/database"
-    "internal/workers"
+	"go-concurrency-sample/internal/config"
+	"go-concurrency-sample/internal/database"
+	"go-concurrency-sample/internal/workers"
 )
 
 func main() {
-    cfg := config.Load()
 
-    db, err := database.NewMySQL(cfg.Database)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
+  if err := config.Load(); err != nil { 
+    log.Fatal(err) 
+  } 
+  cfg := config.Get() 
+  
+  log.Printf( "starting server with %d workers", cfg.Workers.Count, ) 
+  log.Printf( "database: %s:%s/%s", cfg.Database.Host, cfg.Database.Port, cfg.Database.Name, )
+  userRepo := database.NewUserRepository(config.GetDatabase())
+    
+  if userRepo == nil {
+      err := errors.New("error user repo nil")
+      log.Fatal(fmt.Sprintf("error user repo nil %w", err))
+  }
 
     ctx := context.Background()
 
     pool := workers.NewPool(
-        db,
+        userRepo,
         cfg.Workers,
     )
 

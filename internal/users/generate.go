@@ -3,7 +3,7 @@ package users
 import (
     "fmt"
 
-    "internal/types"
+    "go-concurrency-sample/internal/types"
 )
 
 func Generate(index int) types.User {
